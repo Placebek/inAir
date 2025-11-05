@@ -1,0 +1,13 @@
+.env
+
+venv/
+env/
+
+__pycache__/
+alembic.ini
+/alembic/versions
+/.vscode
+ex.py  
+/logs/*
+"logs/"
+media/documents/* 
