@@ -9,6 +9,7 @@ import Drones from './pages/Drones';
 import Video from './pages/Video';
 import Alerts from './pages/Alerts';
 import Login from './pages/Login';
+import DroneDetail from './pages/DroneDetail';
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
               <Route path="/drones" element={<Drones />} />
               <Route path="/video" element={<Video />} />
               <Route path="/alerts" element={<Alerts />} />
+              <Route path="/drone/:id" element={<DroneDetail />} />
             </Route>
           </Routes>
         </Router>

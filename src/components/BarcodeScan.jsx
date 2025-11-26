@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { BrowserMultiFormatReader } from '@zxing/browser';
+import { BrowserMultiFormatReader } from '@zxing/library';
 import { NotFoundException } from '@zxing/library';
 import axios from 'axios';
 import { Loader2 } from 'lucide-react';
