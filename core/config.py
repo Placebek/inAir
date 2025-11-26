@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     DB_USER: str
 
     TOKEN_SECRET_KEY: str
+    TOKEN_EXPIRE_MINUTES: int
     # BASE_PATH: str 
     # API_KEY: str
     # SV_URL: str
