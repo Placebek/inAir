@@ -103,6 +103,7 @@ class Product(Base):
     sku = Column(String(50), unique=True, index=True, nullable=False)
     description = Column(Text)
     price = Column(Float, default=0.0)
+    product_number = Column(Integer, default=0)
     weight_3d = Column(String(50))                    # small_box, medium_box, large_box
     expected_location = Column(String(100))           # например: "Стеллаж A-12"
     category_id = Column(Integer, ForeignKey("product_categories.id"), nullable=True)

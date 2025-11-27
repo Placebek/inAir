@@ -1,37 +1,42 @@
-# app/api/v1/products.py
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+# app/api/v1/product.py
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from sqlalchemy import select, func
-from typing import List, Optional, Literal
+from typing import List, Optional
+
 from database.db import get_db
-from model.model import Product, ProductCategory
-# from app.api.deps import get_current_admin_user  # раскомментируй, если нужно
-
-# ========================================
-# Pydantic схемы
-# ========================================
+from model.model import Product, ProductCategory, InventoryItem  # или model.model
 from pydantic import BaseModel, Field, ConfigDict
+from enum import StrEnum
 
-Weight3DType = Literal["small_box", "medium_box", "large_box", "pallet", "unknown"]
+router = APIRouter(prefix="/products", tags=["products"])
+
+
+class Weight3DType(StrEnum):
+    small_box = "small_box"
+    medium_box = "medium_box"
+    large_box = "large_box"
+    pallet = "pallet"
+    unknown = "unknown"
 
 
 class CategoryRead(BaseModel):
     id: int
     category_name: str
-
     model_config = ConfigDict(from_attributes=True)
 
 
 class ProductBase(BaseModel):
-    barcode: str = Field(..., max_length=100, example="4601234567890")
-    name: str = Field(..., max_length=200, example="Кронштейн для ТВ 32-55\"")
-    sku: str = Field(..., max_length=50, example="TV-BR-001")
-    description: Optional[str] = Field(None)
-    price: float = Field(0.0, ge=0, example=2490.0)
-    weight_3d: Weight3DType = Field("unknown")
-    expected_location: Optional[str] = Field(None, max_length=100, example="A-12-3")
-    category_id: Optional[int] = Field(None)
+    barcode: str = Field(..., max_length=100)
+    name: str = Field(..., max_length=200)
+    sku: str = Field(..., max_length=50)
+    description: Optional[str] = None
+    price: float = Field(0.0, ge=0)
+    product_number: Optional[int] = Field(None, ge=0)
+    weight_3d: Weight3DType = Weight3DType.unknown
+    expected_location: Optional[str] = Field(None, max_length=100)
+    category_id: Optional[int] = None
 
 
 class ProductCreate(ProductBase):
@@ -39,82 +44,67 @@ class ProductCreate(ProductBase):
 
 
 class ProductUpdate(BaseModel):
-    barcode: Optional[str] = Field(None, max_length=100)
-    name: Optional[str] = Field(None, max_length=200)
-    sku: Optional[str] = Field(None, max_length=50)
+    barcode: Optional[str] = None
+    name: Optional[str] = None
+    sku: Optional[str] = None
     description: Optional[str] = None
     price: Optional[float] = Field(None, ge=0)
+    product_number: Optional[int] = None
     weight_3d: Optional[Weight3DType] = None
     expected_location: Optional[str] = None
     category_id: Optional[int] = None
 
 
+# УБИРАЕМ category ИЗ ProductRead — вот и вся магия!
 class ProductRead(ProductBase):
     id: int
-    # ← ВАЖНО: используем alias + populate_by_name
-    category: Optional[CategoryRead] = Field(None, alias="category_rel")
-
-    model_config = ConfigDict(
-        from_attributes=True,
-        populate_by_name=True  # ← Это включает поддержку alias!
-    )
-
-
-# ========================================
-# Роутер
-# ========================================
-router = APIRouter(prefix="/products", tags=["products"])
+    total_quantity: int = 0
+    # ← category НЕТ! Будем добавлять вручную, когда нужно
+    model_config = ConfigDict(from_attributes=True)
 
 
 @router.post("/", response_model=ProductRead, status_code=status.HTTP_201_CREATED)
-async def create_product(
-    product_in: ProductCreate,
-    db: AsyncSession = Depends(get_db),
-    # current_user = Depends(get_current_admin_user)
-):
-    # Проверка на дубли barcode/sku
-    exists = await db.scalar(
-        select(Product).where(
-            (Product.barcode == product_in.barcode) |
-            (Product.sku == product_in.sku)
-        )
-    )
-    if exists:
-        raise HTTPException(status_code=400, detail="Barcode или SKU уже используется")
+async def create_product(product_in: ProductCreate, db: AsyncSession = Depends(get_db)):
+    # Проверка дублей
+    if await db.scalar(select(Product).where(
+        (Product.barcode == product_in.barcode) | (Product.sku == product_in.sku)
+    )):
+        raise HTTPException(400, "Barcode или SKU уже используется")
 
-    if product_in.category_id:
-        cat = await db.get(ProductCategory, product_in.category_id)
-        if not cat:
-            raise HTTPException(status_code=404, detail="Категория не найдена")
+    # Проверка категории
+    if product_in.category_id is not None:
+        if not await db.get(ProductCategory, product_in.category_id):
+            raise HTTPException(404, "Категория не найдена")
 
     new_product = Product(**product_in.model_dump())
     db.add(new_product)
     await db.commit()
     await db.refresh(new_product)
 
-    # Подгружаем категорию одним запросом
-    result = await db.execute(
-        select(Product)
-        .options(joinedload(Product.category_rel))
-        .where(Product.id == new_product.id)
-    )
-    product = result.scalars().unique().one()
-    return product
+    # Просто возвращаем без категории — она не нужна при создании
+    return ProductRead.model_validate(new_product)
 
 
 @router.get("/", response_model=List[ProductRead])
 async def get_products(
     db: AsyncSession = Depends(get_db),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
-    search: Optional[str] = Query(None),
-    category_id: Optional[int] = Query(None),
-    weight_3d: Optional[Weight3DType] = Query(None),
+    skip: int = 0,
+    limit: int = 100,
+    search: Optional[str] = None,
+    category_id: Optional[int] = None,
+    in_stock: bool = False,
 ):
+    qty_subq = (
+        select(InventoryItem.product_id, func.coalesce(func.sum(InventoryItem.quantity), 0).label("total_qty"))
+        .group_by(InventoryItem.product_id)
+        .subquery()
+    )
+
     query = (
-        select(Product)
-        .options(joinedload(Product.category_rel))  # ← Подгружаем связь!
-        .order_by(Product.name)
+        select(Product, func.coalesce(qty_subq.c.total_qty, 0))
+        .outerjoin(qty_subq, Product.id == qty_subq.c.product_id)
+        .options(joinedload(Product.category_rel))  # ← подгружаем!
+        .order_by(Product.product_number.nulls_last(), Product.id)
     )
 
     if search:
@@ -124,76 +114,97 @@ async def get_products(
             func.lower(Product.sku).like(pattern) |
             Product.barcode.like(f"%{search}%")
         )
+
     if category_id is not None:
         query = query.where(Product.category_id == category_id)
-    if weight_3d:
-        query = query.where(Product.weight_3d == weight_3d)
 
-    query = query.offset(skip).limit(limit)
-    result = await db.execute(query)
-    products = result.scalars().unique().all()
-    return products  # ← Pydantic сам положит category_rel → category
+    if in_stock:
+        query = query.having(func.coalesce(qty_subq.c.total_qty, 0) > 0)
+
+    result = await db.execute(query.offset(skip).limit(limit))
+    
+    products = []
+    for product, qty in result.all():
+        data = ProductRead.model_validate(product)
+        data.total_quantity = int(qty)
+        
+        # Ручками добавляем категорию, если она подгружена
+        if product.category_rel:
+            data_dict = data.model_dump()
+            data_dict["category"] = CategoryRead.model_validate(product.category_rel)
+            data = ProductRead(**data_dict)
+        
+        products.append(data)
+    
+    return products
 
 
 @router.get("/{product_id}", response_model=ProductRead)
 async def get_product_by_id(product_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(Product)
-        .options(joinedload(Product.category_rel))
-        .where(Product.id == product_id)
-    )
-    product = result.scalars().unique().one_or_none()
+    product = await db.get(Product, product_id, options=[joinedload(Product.category_rel)])
     if not product:
-        raise HTTPException(status_code=404, detail="Товар не найден")
-    return product
+        raise HTTPException(404, "Товар не найден")
+
+    total = await db.scalar(
+        select(func.coalesce(func.sum(InventoryItem.quantity), 0))
+        .where(InventoryItem.product_id == product_id)
+    )
+
+    data = ProductRead.model_validate(product)
+    data.total_quantity = int(total or 0)
+
+    # Добавляем категорию вручную
+    if product.category_rel:
+        data_dict = data.model_dump()
+        data_dict["category"] = CategoryRead.model_validate(product.category_rel)
+        data = ProductRead(**data_dict)
+
+    return data
 
 
 @router.patch("/{product_id}", response_model=ProductRead)
-async def update_product(
-    product_id: int,
-    product_in: ProductUpdate,
-    db: AsyncSession = Depends(get_db),
-):
+async def update_product(product_id: int, product_in: ProductUpdate, db: AsyncSession = Depends(get_db)):
     product = await db.get(Product, product_id)
     if not product:
-        raise HTTPException(status_code=404, detail="Товар не найден")
+        raise HTTPException(404, "Товар не найден")
 
     update_data = product_in.model_dump(exclude_unset=True)
 
-    # Проверка уникальности
-    if any(k in update_data for k in ("barcode", "sku")):
+    if {"barcode", "sku"} & update_data.keys():
         q = select(Product).where(Product.id != product_id)
         if "barcode" in update_data:
             q = q.where(Product.barcode == update_data["barcode"])
         if "sku" in update_data:
             q = q.where(Product.sku == update_data["sku"])
         if await db.scalar(q):
-            raise HTTPException(status_code=400, detail="Barcode или SKU уже используется")
+            raise HTTPException(400, "Barcode или SKU уже используется")
 
-    if "category_id" in update_data and update_data["category_id"] is not None:
-        cat = await db.get(ProductCategory, update_data["category_id"])
-        if not cat:
-            raise HTTPException(status_code=404, detail="Категория не найдена")
+    if update_data.get("category_id") is not None:
+        if update_data["category_id"] is not None and not await db.get(ProductCategory, update_data["category_id"]):
+            raise HTTPException(404, "Категория не найдена")
 
     for k, v in update_data.items():
         setattr(product, k, v)
 
     await db.commit()
-    await db.refresh(product)
+    await db.refresh(product, ["category_rel"])  # ← можно и так
 
-    result = await db.execute(
-        select(Product)
-        .options(joinedload(Product.category_rel))
-        .where(Product.id == product.id)
-    )
-    return result.scalars().unique().one()
+    data = ProductRead.model_validate(product)
+    data.total_quantity = 0  # или посчитай, если нужно
+
+    if product.category_rel:
+        data_dict = data.model_dump()
+        data_dict["category"] = CategoryRead.model_validate(product.category_rel)
+        data = ProductRead(**data_dict)
+
+    return data
 
 
-@router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{product_id}", status_code=204)
 async def delete_product(product_id: int, db: AsyncSession = Depends(get_db)):
     product = await db.get(Product, product_id)
     if not product:
-        raise HTTPException(status_code=404, detail="Товар не найден")
+        raise HTTPException(404, "Товар не найден")
     await db.delete(product)
     await db.commit()
     return None
