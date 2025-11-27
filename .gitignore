@@ -11,3 +11,5 @@ ex.py
 /logs/*
 "logs/"
 media/documents/* 
+
+app/api/v1/model/

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1 import auth, scan, ws, drones, warehouse, category, product
+from app.api.v1 import auth, scan, ws, drones, warehouse, category, product, photo
 from app.api.v1 import inventory
 from database.db import async_engine as engine
 from model.model import Base
@@ -29,6 +29,7 @@ app.include_router(inventory.router)
 app.include_router(warehouse.router)
 app.include_router(category.router)
 app.include_router(product.router)
+app.include_router(photo.router)
 
 @app.on_event("startup")
 async def startup():
