@@ -109,7 +109,7 @@ class Product(Base):
     weight_3d = Column(String(50))                    # small_box, medium_box, large_box
     expected_location = Column(String(100))           # например: "Стеллаж A-12"
     category_id = Column(Integer, ForeignKey("product_categories.id"), nullable=True)
-    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=True)
 
     # Связи
     category_rel = relationship("ProductCategory", back_populates="products")
