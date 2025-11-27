@@ -5,6 +5,8 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from database.db import Base
+from sqlalchemy.orm import column_property
+from sqlalchemy import select, func
 
 
 # =========================================
@@ -168,3 +170,11 @@ class Log(Base):
 
     user = relationship("User", back_populates="logs")
     drone = relationship("Drone", back_populates="logs")
+
+
+ProductCategory.product_count = column_property(
+    select(func.coalesce(func.count(Product.id), 0))
+    .where(Product.category_id == ProductCategory.id)
+    .scalar_subquery(),
+    deferred=True
+)

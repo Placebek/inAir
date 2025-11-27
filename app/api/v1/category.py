@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
 from typing import List, Optional
 from database.db import get_db
-from model.model import ProductCategory
+from model.model import ProductCategory, Product
 from app.api.deps import get_current_user  # или get_current_admin_user (если нужно только админам)
 
 # ========================================
@@ -27,7 +27,7 @@ class ProductCategoryUpdate(BaseModel):
 
 class ProductCategoryRead(ProductCategoryBase):
     id: int
-
+    product_count: int = Field(0, description="Количество товаров в категории")
     model_config = ConfigDict(from_attributes=True)  # pydantic v2
 
 
@@ -40,35 +40,31 @@ router = APIRouter(
 )
 
 
-@router.post(
-    "/",
-    response_model=ProductCategoryRead,
-    status_code=status.HTTP_201_CREATED,
-    summary="Создать новую категорию товаров",
-)
-async def create_product_category(
-    category_in: ProductCategoryCreate,
-    db: AsyncSession = Depends(get_db),
-    # current_user = Depends(get_current_admin_user)  # раскомментируй, если нужно только админам
-):
-    """Создаёт новую категорию. Название должно быть уникальным."""
-    # Проверка на дубликат по имени
+@router.post("/", response_model=ProductCategoryRead)
+async def create_product_category(category_in: ProductCategoryCreate, db: AsyncSession = Depends(get_db)):
     exists = await db.scalar(
         select(ProductCategory).where(
             func.lower(ProductCategory.category_name) == category_in.category_name.strip().lower()
         )
     )
     if exists:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Категория с названием '{category_in.category_name}' уже существует"
-        )
+        raise HTTPException(status_code=400, detail="Категория уже существует")
 
     new_category = ProductCategory(category_name=category_in.category_name.strip())
     db.add(new_category)
     await db.commit()
     await db.refresh(new_category)
-    return new_category
+
+    # считаем товары в категории
+    product_count = await db.scalar(
+        select(func.count(Product.id)).where(Product.category_id == new_category.id)
+    ) or 0
+
+    return {
+        "id": new_category.id,
+        "category_name": new_category.category_name,
+        "product_count": product_count
+    }
 
 
 @router.get("/", response_model=List[ProductCategoryRead])
@@ -78,17 +74,44 @@ async def get_product_categories(
     limit: int = Query(100, ge=1, le=500),
     search: Optional[str] = Query(None, description="Поиск по названию категории"),
 ):
-    """Получить список всех категорий с фильтрацией и пагинацией"""
-    query = select(ProductCategory).order_by(ProductCategory.category_name)
-
+    """
+    Возвращает все категории + количество товаров в каждой
+    """
+    # 1. Подзапрос: category_id → сколько товаров
+    count_subq = (
+        select(
+            Product.category_id,
+            func.coalesce(func.count(Product.id), 0).label("product_count")
+        )
+        .group_by(Product.category_id)
+        .subquery()
+    )
+    # 2. Основной запрос: категории + LEFT JOIN с подсчётом
+    query = (
+        select(
+            ProductCategory,
+            func.coalesce(count_subq.c.product_count, 0).label("product_count")
+        )
+        .outerjoin(count_subq, ProductCategory.id == count_subq.c.category_id)
+        .order_by(ProductCategory.category_name)
+        .offset(skip)
+        .limit(limit)
+    )
+    # 3. Поиск (опционально)
     if search:
-        pattern = f"%{search.lower()}%"
-        query = query.where(func.lower(ProductCategory.category_name).like(pattern))
-
-    query = query.offset(skip).limit(limit)
+        search_pattern = f"%{search.strip().lower()}%"
+        query = query.where(func.lower(ProductCategory.category_name).like(search_pattern))
     result = await db.execute(query)
-    categories = result.scalars().all()
-    return categories
+    rows = result.all()   # список кортежей (ProductCategory, product_count)
+    # 4. Формируем ответ вручную (самый надёжный способ)
+    response = []
+    for category, cnt in rows:
+        response.append({
+            "id": category.id,
+            "category_name": category.category_name,
+            "product_count": cnt
+        })
+    return response
 
 
 @router.get("/{category_id}", response_model=ProductCategoryRead)
