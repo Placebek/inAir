@@ -38,6 +38,8 @@ class Warehouse(Base):
     number_warehouse = Column(Integer, unique=True, nullable=False)  # добавил unique
     name = Column(String(100))  # например "Центральный склад Москва"
 
+    products = relationship("Product", back_populates="warehouse")
+
 
 class ProductCategory(Base):
     __tablename__ = "product_categories"  # исправил опечатку cetgories → categories
@@ -107,9 +109,11 @@ class Product(Base):
     weight_3d = Column(String(50))                    # small_box, medium_box, large_box
     expected_location = Column(String(100))           # например: "Стеллаж A-12"
     category_id = Column(Integer, ForeignKey("product_categories.id"), nullable=True)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False)
 
     # Связи
     category_rel = relationship("ProductCategory", back_populates="products")
+    warehouse = relationship("Warehouse", back_populates="products")
     items = relationship("InventoryItem", back_populates="product", cascade="all, delete-orphan")
 
 
