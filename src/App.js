@@ -10,6 +10,9 @@ import Video from './pages/Video';
 import Alerts from './pages/Alerts';
 import Login from './pages/Login';
 import DroneDetail from './pages/DroneDetail';
+import Warehouses from './pages/Warehouses';
+import WarehouseDetail from './pages/WarehouseDetail';
+import CategoryProducts from './pages/CategoryProducts';
 
 function App() {
   return (
@@ -26,6 +29,9 @@ function App() {
               <Route path="/video" element={<Video />} />
               <Route path="/alerts" element={<Alerts />} />
               <Route path="/drone/:id" element={<DroneDetail />} />
+              <Route path="/warehouses" element={<Warehouses />} />
+              <Route path="/warehouses/:id" element={<WarehouseDetail />} />
+              <Route path="/warehouse/:id/category/:categoryId" element={<CategoryProducts />} />
             </Route>
           </Routes>
         </Router>

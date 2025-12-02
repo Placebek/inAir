@@ -1,4 +1,4 @@
-import { useSocket } from '../context/SocketContext';
+import { useSocket } from '../../../services/socket/SocketContext';
 import StatsCard from '../components/StatsCard';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import ExportButton from '../components/ExportButton';

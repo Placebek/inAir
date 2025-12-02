@@ -1,6 +1,6 @@
 import { useAuth } from '../context/AuthContext';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LogOut, Home, Map, Package, Bell, Video, Drone } from 'lucide-react';
+import { LogOut, Home, Map, Package, Bell, Video, Drone, Boxes } from 'lucide-react';
 
 function Layout() {
   const { user, logout } = useAuth();
@@ -17,8 +17,8 @@ function Layout() {
       <aside className="w-64 bg-white/80 backdrop-blur-lg shadow-xl border-r border-gray-200 flex flex-col justify-between">
         <div>
           <div className="px-6 py-4 border-b border-gray-200">
-            <h1 className="text-2xl font-bold text-blue-600 tracking-tight">Warehouse AI</h1>
-            <p className="text-sm text-gray-500">Smart Inventory</p>
+            <h1 className="text-2xl font-bold text-blue-600 tracking-tight">InventX</h1>
+            <p className="text-sm text-gray-500">Умный учёт</p>
           </div>
 
           <nav className="mt-4 flex flex-col space-y-1 px-3">
@@ -30,7 +30,7 @@ function Layout() {
                 }`
               }
             >
-              <Home size={20} /> Home
+              <Home size={20} /> Главная
             </NavLink>
 
             <NavLink
@@ -41,7 +41,7 @@ function Layout() {
                 }`
               }
             >
-              <Package size={20} /> Inventory
+              <Package size={20} /> Инвентарь
             </NavLink>
 
             <NavLink
@@ -52,7 +52,7 @@ function Layout() {
                 }`
               }
             >
-              <Map size={20} /> Map
+              <Map size={20} /> Карта
             </NavLink>
 
             <NavLink
@@ -63,7 +63,7 @@ function Layout() {
                 }`
               }
             >
-              <Drone size={20} /> Drones
+              <Drone size={20} /> Дроны
             </NavLink>
 
             <NavLink
@@ -74,7 +74,7 @@ function Layout() {
                 }`
               }
             >
-              <Video size={20} /> Video
+              <Video size={20} /> Видео
             </NavLink>
 
             <NavLink
@@ -85,7 +85,19 @@ function Layout() {
                 }`
               }
             >
-              <Bell size={20} /> Alerts
+              <Bell size={20} /> Оповещения
+            </NavLink>
+
+            {/* Новый пункт меню */}
+            <NavLink
+              to="/warehouses"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-4 py-2 rounded-lg transition-colors ${
+                  isActive ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-blue-100 text-gray-700'
+                }`
+              }
+            >
+              <Boxes size={20} /> Мой склад
             </NavLink>
           </nav>
         </div>
@@ -96,7 +108,7 @@ function Layout() {
             onClick={logout}
             className="flex items-center gap-3 w-full px-4 py-2 rounded-lg hover:bg-red-100 text-red-600 transition-colors"
           >
-            <LogOut size={20} /> Logout
+            <LogOut size={20} /> Выйти
           </button>
         </div>
       </aside>

@@ -1,4 +1,4 @@
-import { useSocket } from '../context/SocketContext';
+import { useSocket } from '../../../services/socket/SocketContext';
 import AlertSystem from '../components/AlertSystem';
 
 function Alerts() {

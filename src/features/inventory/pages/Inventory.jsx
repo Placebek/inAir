@@ -1,6 +1,6 @@
 // src/pages/Inventory.jsx
 import { useState, useEffect } from 'react';
-import { useSocket } from '../context/SocketContext';
+import { useSocket } from '../../../services/socket/SocketContext';
 import InventoryTable from '../components/InventoryTable';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, PlusCircle, Keyboard, FileUp, Camera, Barcode, RefreshCw } from 'lucide-react';
@@ -22,7 +22,7 @@ function Inventory() {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
-      const res = await fetch('http://localhost:8000/inventory', {
+      const res = await fetch('http://localhost:8000/products', {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Ошибка загрузки');
@@ -198,7 +198,7 @@ function Inventory() {
                 <X size={32} />
               </button>
 
-              <h2 className="text-3xl font-bold text-gray-800 mb-8 text-center">
+              <h2 className="text-3xl font-bold text-gray-800  text-center">
                 {modalType ? 'Добавление товара' : 'Как добавить?'}
               </h2>
 
